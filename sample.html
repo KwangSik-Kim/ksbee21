@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+ <head>
+  <meta charset="UTF-8">
+  <meta name="Generator" content="EditPlus®">
+  <meta name="Author" content="">
+  <meta name="Keywords" content="">
+  <meta name="Description" content="">
+  <title>Sample</title>
+	<link rel="stylesheet" type="text/css" href="ksbee.css">
+	<script src="ksbee.js"></script>
+
+	<script>
+		var ctxMenu	= undefined;
+		function testUserClickEvt(evtObj) {
+			if ( evtObj ) {
+				alert ( "CLICKED : " + evtObj.currentTarget + " : " + ( evtObj.target || evtObj.srcElement ) );
+			}
+		}
+
+		function testUserMouseDownEvt(evtObj) {
+			if ( evtObj ) {
+				alert ( "MOUSE DOWN : " + evtObj.currentTarget + " : " + ( evtObj.target || evtObj.srcElement ) );
+			}
+		}
+
+		function initResource() {
+			
+			var divObj = document.createElement("DIV");<!--  -->
+			divObj.style.width = "600px";
+			divObj.style.height = "600px";
+			divObj.style.border = "1px solid black";
+			document.body.appendChild(divObj);
+
+			var myMap = new Map();
+			myMap.set("click",testUserClickEvt);
+			myMap.set("mousedown",testUserMouseDownEvt);
+
+			ksbee.evt.appendDomEvents(divObj, myMap);
+//			ksbee.evt.executeTriggerEvents(divObj,"click");
+
+			var jsonObj = [{"ID":"a","TITLE": "aa","CHILD":""},
+						{"ID":"b","TITLE": "bb","CHILD": [
+							{ "ID":"b_01","TITLE": "bb_01","CHILD": [
+								{ "ID":"b_01_01","TITLE": "bb_01_01","CHILD":""},
+								{ "ID":"b_01_02","TITLE": "bb_01_02","CHILD":""},
+							]},
+							{ "ID":"b_02","TITLE": "bb_02","CHILD":""},
+							{ "ID":"b_03","TITLE": "bb_03","CHILD":""},
+						]},
+						{"ID":"c","TITLE": "cc","CHILD":{
+								"c_01":{"ID":"c_01","TITLE": "cc_01","CHILD":""},
+								"c_02":{"ID":"c_02","TITLE": "cc_02","CHILD":""}
+							}
+						},
+						{"ID":"d","TITLE": "dd","CHILD":""}
+			];
+<!--  -->
+	//		alert ( JSON.stringify(jsonObj));
+
+			let mapObj = ksbee.data.tranlateArrayToMap(jsonObj);
+	//		alert ( ksbee.data.tranlateMapToObjects(mapObj) );
+	//		alert(JSON.stringify(ksbee.data.tranlateMapToObjects(mapObj)));
+			var opt = new Map();
+			opt.set("NAME","TITLE");
+			opt.set("CHILD","CHILD");
+			opt.set("BLOCK_CLS","___nested___"); //___active___
+			opt.set("FOLD_CLS","__fold_unfold__");<!--  -->
+
+			ctxMenu = new ksbee.ui.context.ContextMenu();
+			ctxMenu.initContextMenu(jsonObj);
+			let mainCtxUI =ctxMenu.getMainContext(0,0);
+
+			opt.set("contextMenuObj", ctxMenu);
+
+
+			var obj = ksbee.ui.tree.makeTreeUI(jsonObj,opt);
+			document.body.appendChild(obj);
+
+			document.body.appendChild(mainCtxUI);
+		}
+
+		window.onload = initResource;
+
+
+	</script>
+ </head>
+ <body>
+  
+ </body>
+</html>

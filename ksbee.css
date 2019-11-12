@@ -1,0 +1,170 @@
+		ul.ksbee___tree, ul.ksbee___tree ul {
+			list-style: none;
+			margin:0px;
+			padding:0px;
+		}
+
+		ul.ksbee___tree ul {
+			margin-left:30px;
+		}
+
+		ul.ksbee___tree li {
+			padding:1px 5px 1px 0px;
+			margin:0px;
+			position:relative;
+			line-height:22px;
+			border-left:1px solid black;
+		/*  background-color:#AAAAAA;*/
+		}
+
+		ul.ksbee___tree li:before {
+			content:'';
+			top:-0.3em;
+			left:0px;
+			position:relative;
+			display:inline-block;
+			height:1px;
+			width:20px;
+			border-bottom:1px solid blue;
+		}
+
+		ul.ksbee___tree li:last-child {
+			border-left:none;
+		}
+
+		ul.ksbee___tree li:last-child:before {
+			content:'';
+			height:12px;
+			border-left:1px solid red;
+		}
+
+		ul.ksbee___tree SPAN {
+			display:inline-block;
+			vertical-align:middle;
+			border:1px dotted #CCC;
+		}
+
+		ul.ksbee___tree span.__fold_unfold__ {
+			display:inline-block;
+			margin:0px;
+			padding:0px;
+			text-align:center;
+			vertical-align:middle;
+			width:12px;
+			height:24px;
+			cursor:pointer;
+		}
+
+		ul.ksbee___tree ul.___nested___ {
+			display:none;
+		}
+
+		ul.ksbee___tree ul.___active___ {
+			display:block;
+		}
+
+		.___ksbee_span_check_ui___ {
+			margin:-1px -1px 0px 0px;
+			padding:0px;
+			width:1px;
+			height:1px;
+			clip: rect(0,0,0,0);
+		}
+
+		.___ksbee_span_check_ui___ + LABEL {
+			cursor:pointer;
+		}
+
+		.___ksbee_span_check_ui___ + LABEL:BEFORE {
+			content: "";
+			width: 16px;
+			height: 16px;
+			margin-right: 5px;
+			display:inline-block;
+			/*position: absolute;*/
+			left: 0;
+			background-color: #f7f7f7;
+			border-radius: 2px;
+			box-shadow: inset 0px 1px 1px 0px rgba(0, 0, 0, .3), 0px 1px 0px 0px rgba(255, 255, 255, .8);  
+			text-align:center;
+			vertical-align:middle;
+		}
+
+		.___ksbee_span_check_ui___:CHECKED + LABEL:BEFORE {
+			content: "\2714"; 
+		}
+
+		.___ksbee_span_check_ui___ + LABEL.partial_checked:BEFORE {
+			content: "\2A00"; 
+		}
+
+		.___ksbee_context_modal_block_ui___ {
+			position:fixed;
+			left:0px;
+			top:0px;
+			width:100%;
+			height:100%;
+			z-index:1;
+			padding:0px;
+			margin:0px;
+			background-color:rgba(225,225,225,0.5);
+		}
+
+		.___ksbee_context_main_block_ui___ {
+			position:absolute;
+			width:200px;
+			padding:0px;
+			margin:0px;
+			border:1px solid black;
+			background-color:red;
+		}
+
+		.___ksbee_context_menu_block_ui___ {
+			position:relative;
+			width:calc(100% - 4px);
+			padding:0px;
+			margin:1px;
+			border:1px dotted blue;
+			background-color:#fefefe;
+		}
+
+		.___ksbee_context_menu_items_ui___ {
+/*			width:calc(100% - 8px); */
+			padding:1px;
+			margin:1px;
+			height:22px;
+			border:1px dotted blue;
+			background-color:#efeffe;
+			vertical-align:middle;
+			text-align:left;
+		}
+
+		.___ksbee_context_menu_items_ui___ SPAN {
+			display:inline-block;
+			width:calc(100% - 40px);
+			padding:0px 10px 0px 5px;
+		}
+
+		.___ksbee_context_menu_items_ui___ A {
+			display:inline-block;
+			text-decoration:none;
+			width:16px;
+			height:16px;
+			background-color:rgba(225,225,125,0.6);
+			border-radius:8px;
+			font-size:16px;
+			text-align:center;
+			vertical-align:middle;
+		}
+
+
+		.___ksbee_context_menu_subitems_ui___ {
+			position:absolute;
+			width:1px;
+			height:1px;
+			padding:0px;
+			margin:0px;
+			border:0px dotted blue;
+			background-color:#fefefe;
+			display:none;
+		}
