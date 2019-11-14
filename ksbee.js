@@ -616,6 +616,226 @@ var ksbee = (function() {
 		+ "\n" + e.clientX + " , " + e.clientY);
 	}
 
+
+	function executeFadeInObject( obj, delta, target, timeMillis ) {
+		if ( !isDomElement(obj) ) {
+			return;
+		}
+		if ( !isNumber(delta) ) {
+			delta = 0.01;
+		}
+		if ( !isNumber(target) ) {
+			target = 1;
+		}
+		if ( !isNumber(timeMillis) ) {
+			timeMillis = 10;
+		}
+		let orgStyle = obj.getAttribute("___originalOpacityStyle___");
+		if (!isString(orgStyle)) {
+			obj.setAttribute("___originalOpacityStyle___",obj.style.opacity);
+		}
+		orgStyle = obj.getAttribute("___originalDisplayStyle___");
+		if (!isString(orgStyle)) {
+			obj.setAttribute("___originalDisplayStyle___",obj.style.display);
+		}
+		obj.style.opacity = 0;
+		executeFadeInObjectTimer(obj,delta,target,timeMillis);
+	}
+
+	function executeFadeInObjectTimer( obj, delta, target, timeMillis ) {
+		if ( !isDomElement(obj) ) {
+			return;
+		}
+		let cValue = parseFloat(obj.style.opacity);
+		cValue += delta;
+//		alert(cValue + " : " + delta + " : " + target );
+		if ( cValue >= target ) {
+			let orgStyle = obj.getAttribute("___originalOpacityStyle___");
+			obj.style.opacity = orgStyle;
+//			alert ("Finished");
+		} else {
+			obj.style.opacity = cValue;
+			setTimeout(function() {
+				executeFadeInObjectTimer(obj,delta,target,timeMillis);
+			}, timeMillis);
+		}
+	}
+
+	function executeFadeOutObject( obj, delta, target, timeMillis ) {
+		if ( !isDomElement(obj) ) {
+			return;
+		}
+		if ( !isNumber(delta) ) {
+			delta = 0.01;
+		}
+		if ( !isNumber(target) ) {
+			target = 0;
+		}
+		if ( !isNumber(timeMillis) ) {
+			timeMillis = 10;
+		}
+		let orgStyle = obj.getAttribute("___originalOpacityStyle___");
+		if (!isString(orgStyle)) {
+			obj.setAttribute("___originalOpacityStyle___",obj.style.opacity);
+		}
+		orgStyle = obj.getAttribute("___originalDisplayStyle___");
+		if (!isString(orgStyle)) {
+			obj.setAttribute("___originalDisplayStyle___",obj.style.display);
+		}
+		obj.style.opacity = 1;
+		executeFadeOutObjectTimer(obj,delta,target,timeMillis);
+	}
+
+	function executeFadeOutObjectTimer( obj, delta, target, timeMillis ) {
+		if ( !isDomElement(obj) ) {
+			return;
+		}
+		let cValue = parseFloat(obj.style.opacity);
+		cValue -= delta;
+		if ( cValue <= target ) {
+			obj.style.opacity = 0;
+			if ( target < 0 ) {
+				obj.style.display = "none";
+			}
+//			alert ("Finished - OUT");
+		} else {
+			obj.style.opacity = cValue;
+			setTimeout(function() {
+				executeFadeOutObjectTimer(obj,delta,target,timeMillis);
+			}, timeMillis);
+		}
+	}
+
+	function executeSlideDownObject( obj, delta, target, timeMillis ) {
+		if ( !isDomElement(obj) ) {
+			return;
+		}
+		if ( !isNumber(delta) ) {
+			delta = 10;
+		}
+		if ( !isNumber(timeMillis) ) {
+			timeMillis = 10;
+		}
+		let orgStyle = obj.getAttribute("___originalHeightStyle___");
+		if (!isString(orgStyle)) {
+			obj.setAttribute("___originalHeightStyle___",obj.style.height);
+		}
+		orgStyle = obj.getAttribute("___originalDisplayStyle___");
+		if (!isString(orgStyle)) {
+			obj.setAttribute("___originalDisplayStyle___",obj.style.display);
+		}
+
+		orgStyle = obj.getAttribute("___originalOverflowStyle___");
+		if (!isString(orgStyle)) {
+			obj.setAttribute("___originalOverflowStyle___",obj.style.overflow);
+		}
+
+		orgStyle = obj.getAttribute("___originalComuptedHeightStyle___");
+		if (!isString(orgStyle)) {
+			objStyle = window.getComputedStyle(obj).getPropertyValue("height");
+			obj.setAttribute("___originalComuptedHeightStyle___",objStyle);
+		}
+		if ( !isNumber(target) ) {
+			target = parseFloat(objStyle);
+		}
+		obj.style.height = "0px";
+		obj.style.overflow = "hidden";
+		obj.style.display = "block";
+		executeSlideDownObjectTimer(obj,delta,target,timeMillis);
+	}
+
+	function executeSlideDownObjectTimer( obj, delta, target, timeMillis ) {
+		if ( !isDomElement(obj) ) {
+			return;
+		}
+		let cValue = parseFloat(obj.style.height);
+		cValue += delta;
+//		alert(cValue + " : " + delta + " : " + target );
+		if ( cValue >= target ) {
+			obj.style.height = target+"px";
+			let orgStyle = obj.getAttribute("___originalHeightStyle___");
+			obj.style.height = orgStyle;
+			orgStyle = obj.getAttribute("___originalOverflowStyle___");
+			obj.style.overflow = orgStyle;
+		} else {
+			obj.style.height = cValue+"px";
+			setTimeout(function() {
+				executeSlideDownObjectTimer(obj,delta,target,timeMillis);
+			}, timeMillis);
+		}
+	}
+
+
+	function executeSlideUpObject( obj, delta, target, timeMillis ) {
+		if ( !isDomElement(obj) ) {
+			return;
+		}
+		if ( !isNumber(delta) ) {
+			delta = 10;
+		}
+		if ( !isNumber(timeMillis) ) {
+			timeMillis = 10;
+		}
+		let orgStyle = obj.getAttribute("___originalHeightStyle___");
+		if (!isString(orgStyle)) {
+			obj.setAttribute("___originalHeightStyle___",obj.style.height);
+		}
+		orgStyle = obj.getAttribute("___originalDisplayStyle___");
+		if (!isString(orgStyle)) {
+			obj.setAttribute("___originalDisplayStyle___",obj.style.display);
+		}
+
+		orgStyle = obj.getAttribute("___originalOverflowStyle___");
+		if (!isString(orgStyle)) {
+			obj.setAttribute("___originalOverflowStyle___",obj.style.overflow);
+		}
+
+
+		orgStyle = obj.getAttribute("___originalComuptedHeightStyle___");
+		if (!isString(orgStyle)) {
+			objStyle = window.getComputedStyle(obj).getPropertyValue("height");
+			obj.setAttribute("___originalComuptedHeightStyle___",objStyle);
+		} else {
+			let objStyle02 = window.getComputedStyle(obj).getPropertyValue("height");
+			if ( parseFloat(orgStyle) < parseFloat(objStyle02) ) {
+				objStyle = objStyle02;
+				obj.setAttribute("___originalComuptedHeightStyle___",objStyle);
+			}
+		}
+
+		if ( !isNumber(target) ) {
+			target = -1;
+		}
+		obj.style.overflow = "hidden";
+		obj.style.display = "block";
+		executeSlideUpObjectTimer(obj,delta,target,timeMillis);
+	}
+
+	function executeSlideUpObjectTimer( obj, delta, target, timeMillis ) {
+		if ( !isDomElement(obj) ) {
+			return;
+		}
+		let cValue = parseInt(window.getComputedStyle(obj).getPropertyValue("height"));
+		cValue -= delta;
+		if ( cValue <= target ) {
+			obj.style.height = 0+"px";
+			if ( target < 0 ) {
+				obj.style.display = "none";
+			}
+			orgStyle = obj.getAttribute("___originalOverflowStyle___");
+			obj.style.overflow = orgStyle;
+
+//			alert ("Finished - OUT");
+		} else {
+			obj.style.height = cValue+"px";
+			setTimeout(function() {
+				executeSlideUpObjectTimer(obj,delta,target,timeMillis);
+			}, timeMillis);
+		}
+	}
+
+
+
 	var ContextMenu = function() {
 		var storage = new Map();
 		var optObj	= new Map();
@@ -914,7 +1134,12 @@ var ksbee = (function() {
 		tranlateArrayToMap : tranlateArrayToMap, 
 		tranlateMapToObjects : tranlateMapToObjects,
 	};
-	var ui = {};
+	var ui = {
+		executeFadeInObject : executeFadeInObject,
+		executeFadeOutObject : executeFadeOutObject,
+		executeSlideDownObject : executeSlideDownObject,
+		executeSlideUpObject : executeSlideUpObject,
+	};
 	var grid = ui.grid = {};
 	var tree = ui.tree = {
 		makeTreeUI : makeTreeUI,

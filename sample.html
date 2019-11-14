@@ -78,6 +78,36 @@
 			document.body.appendChild(obj);
 
 			document.body.appendChild(mainCtxUI);
+
+			let btnFadeIn = document.createElement("BUTTON");
+			btnFadeIn.addEventListener("click", function(event) { ksbee.ui.executeFadeInObject(obj,0.02,1,10); }, false);
+			btnFadeIn.innerText = "Fade In";
+
+			let btnFadeOut = document.createElement("BUTTON");
+			btnFadeOut.addEventListener("click", function(event) { ksbee.ui.executeFadeOutObject(obj,0.02,0,10); }, false);
+			btnFadeOut.innerText = "Fade Out";
+
+			let btnSlideDown = document.createElement("BUTTON");
+			btnSlideDown.addEventListener("click", function(event) { ksbee.ui.executeSlideDownObject(obj,10,undefined,100); }, false);
+			btnSlideDown.innerText = "Slide Down";
+
+			let btnSlideUp = document.createElement("BUTTON");
+			btnSlideUp.addEventListener("click", function(event) { ksbee.ui.executeSlideUpObject(obj,10,-1,100); }, false);
+			btnSlideUp.innerText = "Slide Up";
+
+
+			let cmdDiv = document.createElement("DIV");
+			cmdDiv.appendChild(btnFadeIn);
+			cmdDiv.appendChild(btnFadeOut);
+			cmdDiv.appendChild(btnSlideDown);
+			cmdDiv.appendChild(btnSlideUp);
+
+			cmdDiv.style.padding = "4px";
+			cmdDiv.style.margin = "3px";
+			cmdDiv.style.border = "1px solid #AAAAAA";
+
+			document.body.appendChild(cmdDiv);
+
 		}
 
 		window.onload = initResource;
@@ -86,6 +116,6 @@
 	</script>
  </head>
  <body>
-  
+  <p></p><p></p>
  </body>
 </html>
