@@ -6,12 +6,15 @@ import javax.swing.table.*;
 import javax.swing.tree.*;
 import java.awt.*;
 import java.awt.event.*;
+import java.awt.datatransfer.StringSelection;
 import java.awt.geom.*;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.List;
 import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.function.Supplier;
 
 /**
  * Java 8+ / Swing + Java2D only.
@@ -26,6 +29,9 @@ import java.util.function.Consumer;
  *
  * Classes are nested only to make this example easy to copy and compile.
  * Main areas: Data -> Service -> Controller -> View / Modules -> EventAdapter.
+ * Context menus: tree, all three tables, graph nodes and empty canvas areas.
+ * Popup actions capture stable IDs; opening a popup does not open a file.
+ * Shift+F10 / context-menu key opens the menu for the focused selection.
  */
 public class ModularEventMockup {
     // ---- UI theme / cached Java2D icons ------------------------------------
@@ -45,6 +51,8 @@ public class ModularEventMockup {
     static final Icon FAMILY = new VectorIcon("box", PURPLE), FILE = new VectorIcon("file", BLUE);
     static final Icon SAVE = new VectorIcon("save", GREEN), COMPARE = new VectorIcon("compare", PURPLE);
     static final Icon GENERATE = new VectorIcon("plus", AMBER);
+    static final Icon COPY = new VectorIcon("copy", BLUE), INFO = new VectorIcon("info", MUTED);
+    static final Icon REFRESH = new VectorIcon("refresh", GREEN);
     static final DateTimeFormatter CLOCK = DateTimeFormatter.ofPattern("HH:mm:ss");
 
     enum Preset { FULL, EDIT, HISTORY }
@@ -190,6 +198,13 @@ public class ModularEventMockup {
         void compare();
         void generate();
         void save();
+        // Context-menu commands use stable IDs, never Swing events or row numbers.
+        void refreshProduct(String productId);
+        void inspectFile(String fileId);
+        void compareCandidate(String ownerFileId, String candidateId);
+        void generateFromCandidate(String ownerFileId, String candidateId);
+        void previewRevision(String ownerFileId, String revisionId);
+        void inspectRevision(String ownerFileId, String revisionId);
     }
     interface WorkspaceViewPort {
         void showFiles(String productId, List<FileInfo> files);
@@ -297,6 +312,53 @@ public class ModularEventMockup {
             }
             updateCapabilities();
         }
+        public void refreshProduct(String id) {
+            String previous = Objects.equals(id, productId) ? fileId : null;
+            view.trace("CONTROLLER", "refreshProduct(" + id + ") [drafts retained]");
+            view.trace("SERVICE", "filesFor(" + id + ") [memory]");
+            List<FileInfo> files = service.filesFor(id);
+            productId = id; fileId = null; candidateId = null;
+            view.showFiles(id, files);
+            String restore = files.isEmpty() ? null : files.get(0).id;
+            for (FileInfo f : files) if (f.id.equals(previous)) restore = previous;
+            if (restore != null) selectFile(restore);
+            updateCapabilities();
+        }
+        public void inspectFile(String id) {
+            view.trace("CONTROLLER", "inspectFile(" + id + ")");
+            view.trace("SERVICE", "load file info [memory]");
+            WorkspaceData data = service.load(id);
+            FileInfo f = data.file;
+            String info = "File=" + f.id + ", product=" + f.productId + ", name=" + f.name
+                    + ", group=" + f.group + ", HEAD=" + f.head + ", revisions=" + data.revisions.size();
+            view.trace("INFO", info); view.status(info);
+        }
+        boolean currentOwner(String expected) {
+            if (expected != null && expected.equals(fileId)) return true;
+            view.trace("BLOCKED", "Context owner changed; open the menu again.");
+            view.status("The target file changed. Open the context menu again.");
+            return false;
+        }
+        public void compareCandidate(String owner, String candidate) {
+            if (!currentOwner(owner)) return;
+            selectCandidate(candidate); compare();
+        }
+        public void generateFromCandidate(String owner, String candidate) {
+            if (!editable || !currentOwner(owner)) return;
+            selectCandidate(candidate); generate();
+        }
+        public void previewRevision(String owner, String revision) {
+            if (currentOwner(owner)) previewRevision(revision);
+        }
+        public void inspectRevision(String owner, String revision) {
+            if (!currentOwner(owner)) return;
+            view.trace("CONTROLLER", "inspectRevision(" + owner + ", " + revision + ")");
+            view.trace("SERVICE", "revision info [memory]");
+            Revision r = service.revision(owner, revision);
+            String info = owner + " / " + r.id + " | parent=" + (r.parentId == null ? "-" : r.parentId)
+                    + " | " + r.note + " | " + r.text.length() + " characters";
+            view.trace("INFO", info); view.status(info);
+        }
         void updateCapabilities() {
             boolean selected = fileId != null;
             view.capabilities(editable && selected && drafts.get(fileId).dirty(),
@@ -335,6 +397,7 @@ public class ModularEventMockup {
     }
     static final class ProductTreeModule extends PanelModule {
         final JTree tree;
+        final JScrollPane scrollPane;
         final Map<String, TreePath> paths = new HashMap<>();
         ProductTreeModule() {
             super("products", "Product families");
@@ -372,7 +435,7 @@ public class ModularEventMockup {
                 if (data.id != null) paths.put(data.id, new TreePath(n.getPath()));
             }
             for (int i = 0; i < tree.getRowCount(); i++) tree.expandRow(i);
-            body.add(scroll(tree));
+            scrollPane = scroll(tree); body.add(scrollPane);
         }
         static DefaultMutableTreeNode node(String label, String id) {
             return new DefaultMutableTreeNode(new ProductNode(label, id));
@@ -403,6 +466,7 @@ public class ModularEventMockup {
     static final class TableModule extends PanelModule {
         final JTable table;
         final RowsModel model;
+        final JScrollPane scrollPane;
         TableModule(String id, String title, String[] columns, Class<?>... types) {
             super(id, title);
             model = new RowsModel(columns, types); table = new JTable(model);
@@ -415,7 +479,7 @@ public class ModularEventMockup {
             JTableHeader h = table.getTableHeader();
             h.setReorderingAllowed(false); h.setPreferredSize(new Dimension(100, 30));
             h.setDefaultRenderer(new HeaderRenderer());
-            body.add(scroll(table));
+            scrollPane = scroll(table); body.add(scrollPane);
             setPreferredSize(new Dimension(650, 153));
         }
         String idAtViewRow(int viewRow) {
@@ -523,9 +587,11 @@ public class ModularEventMockup {
     }
     static final class LineageGraphModule extends PanelModule {
         final GraphCanvas canvas = new GraphCanvas();
+        final JScrollPane scrollPane;
         LineageGraphModule() {
             super("lineage", "File lineage / Click a revision");
-            body.add(scroll(canvas)); setMinimumSize(new Dimension(150, 130));
+            scrollPane = scroll(canvas); body.add(scrollPane);
+            setMinimumSize(new Dimension(150, 130));
         }
         public void dispose() { canvas.setToolTipText(null); }
     }
@@ -533,7 +599,15 @@ public class ModularEventMockup {
         final List<GraphNode> nodes = new ArrayList<>();
         String selected;
         double zoom = 1.0;
-        GraphCanvas() { setBackground(WHITE); setToolTipText("Click: preview / Right-click: menu / Wheel: zoom"); }
+        GraphCanvas() {
+            setBackground(WHITE); setFocusable(true);
+            setToolTipText("Click: preview / Right-click: menu / Wheel: zoom");
+        }
+        GraphNode node(String id) {
+            for (GraphNode n : nodes) if (n.revision.id.equals(id)) return n;
+            return null;
+        }
+        void resetZoom() { zoom = 1.0; updateSize(); repaint(); }
         void setRevisions(List<Revision> revisions) {
             nodes.clear(); for (Revision r : revisions) nodes.add(new GraphNode(r, nodes.size()));
             selected = revisions.isEmpty() ? null : revisions.get(revisions.size() - 1).id;
@@ -588,6 +662,8 @@ public class ModularEventMockup {
         final JLabel statusLabel = new JLabel("MOCK: memory only. No files are changed.");
         Action saveAction, compareAction, generateAction;
         int renderDepth;
+        String shownFileId, shownProductId;
+        long contextVersion; // Changes when displayed files / revisions are replaced.
         WorkspaceView(Preset preset) {
             super(new BorderLayout(8, 8)); this.preset = preset;
             candidates = preset == Preset.HISTORY ? null : new TableModule("candidates", "Candidates / Sample scores",
@@ -609,6 +685,7 @@ public class ModularEventMockup {
             try { operation.run(); } finally { renderDepth--; }
         }
         public void showFiles(String product, List<FileInfo> data) {
+            contextVersion++; shownProductId = product; shownFileId = null;
             render(() -> {
                 products.select(product);
                 List<TableRow> rows = new ArrayList<>();
@@ -618,6 +695,7 @@ public class ModularEventMockup {
             trace("VIEW", "product tree + file table updated");
         }
         public void showWorkspace(WorkspaceData data, String draft, boolean dirty) {
+            contextVersion++; shownFileId = data.file.id;
             render(() -> {
                 files.select(data.file.id);
                 if (candidates != null) {
@@ -679,6 +757,78 @@ public class ModularEventMockup {
     // =====================================================================
     // 6. EVENT ADAPTER: Swing events -> typed intent. Only this layer binds.
     // =====================================================================
+    /** Shared popup gesture / keyboard handling. Contains no business logic. */
+    static final class ContextMenuSupport extends MouseAdapter implements AutoCloseable {
+        final JComponent owner;
+        final JViewport viewport;
+        final Function<Point, JPopupMenu> builder;
+        final Supplier<Point> keyboardAnchor;
+        final InputMap input;
+        final Object actionKey = new Object();
+        final KeyStroke[] keys = {
+                KeyStroke.getKeyStroke(KeyEvent.VK_F10, InputEvent.SHIFT_DOWN_MASK),
+                KeyStroke.getKeyStroke(KeyEvent.VK_CONTEXT_MENU, 0)
+        };
+        final Object[] previous = new Object[keys.length];
+        JPopupMenu popup;
+        boolean shownOnPress, closed;
+        ContextMenuSupport(JComponent owner, JViewport viewport,
+                Function<Point, JPopupMenu> builder, Supplier<Point> keyboardAnchor) {
+            this.owner = owner; this.viewport = viewport;
+            this.builder = builder; this.keyboardAnchor = keyboardAnchor;
+            owner.addMouseListener(this); viewport.addMouseListener(this);
+            input = owner.getInputMap(JComponent.WHEN_FOCUSED);
+            for (int i = 0; i < keys.length; i++) {
+                previous[i] = input.get(keys[i]); input.put(keys[i], actionKey);
+            }
+            owner.getActionMap().put(actionKey, new AbstractAction() {
+                public void actionPerformed(ActionEvent e) {
+                    Point p = keyboardAnchor.get();
+                    if (p != null) showAt(owner, p);
+                }
+            });
+        }
+        public void mousePressed(MouseEvent e) {
+            shownOnPress = false;
+            if (e.isPopupTrigger()) { shownOnPress = true; showFor(e); }
+        }
+        public void mouseReleased(MouseEvent e) {
+            if (e.isPopupTrigger() && !shownOnPress) showFor(e);
+            shownOnPress = false;
+        }
+        void showFor(MouseEvent e) {
+            e.consume();
+            showAt((JComponent) e.getComponent(), e.getPoint());
+        }
+        void showAt(JComponent invoker, Point p) {
+            if (closed || !owner.isEnabled() || !invoker.isShowing()) return;
+            if (popup != null) popup.setVisible(false);
+            // Viewport empty-space events must be converted to owner coordinates.
+            Point targetPoint = SwingUtilities.convertPoint(invoker, p, owner);
+            JPopupMenu next = builder.apply(targetPoint);
+            if (next == null) return;
+            popup = next;
+            next.addPopupMenuListener(new PopupMenuListener() {
+                public void popupMenuWillBecomeVisible(PopupMenuEvent e) { }
+                public void popupMenuWillBecomeInvisible(PopupMenuEvent e) { clear(); }
+                public void popupMenuCanceled(PopupMenuEvent e) { clear(); }
+                void clear() { if (popup == next) popup = null; }
+            });
+            owner.requestFocusInWindow();
+            next.show(invoker, p.x, p.y);
+        }
+        public void close() {
+            if (closed) return; closed = true;
+            if (popup != null) popup.setVisible(false);
+            owner.removeMouseListener(this); viewport.removeMouseListener(this);
+            for (int i = 0; i < keys.length; i++) {
+                if (previous[i] == null) input.remove(keys[i]);
+                else input.put(keys[i], previous[i]);
+            }
+            owner.getActionMap().remove(actionKey);
+        }
+    }
+
     static final class UiEventAdapter implements AutoCloseable {
         final WorkspaceView view;
         final WorkspaceActions target;
@@ -690,8 +840,15 @@ public class ModularEventMockup {
             installed = true;
             installActions(); installTree();
             bindSelection(view.files, "File selection", target::selectFile);
-            if (view.candidates != null) { bindSelection(view.candidates, "Candidate selection", target::selectCandidate); installCandidateMouse(); }
-            if (view.history != null) bindSelection(view.history, "History selection", target::previewRevision);
+            installTableMouse(view.files);
+            if (view.candidates != null) {
+                bindSelection(view.candidates, "Candidate selection", target::selectCandidate);
+                installTableMouse(view.candidates);
+            }
+            if (view.history != null) {
+                bindSelection(view.history, "History selection", target::previewRevision);
+                installTableMouse(view.history);
+            }
             installEditor(); if (view.graph != null) installGraph();
         }
         void event(String text) { view.trace("EVENT", text); }
@@ -699,7 +856,11 @@ public class ModularEventMockup {
             return new AbstractAction(name, icon) {
                 public void actionPerformed(ActionEvent e) {
                     if (!isEnabled() || closed) return;
-                    event("ActionEvent: " + name + " [shared button/menu/key action]"); call.run();
+                    event("ActionEvent: " + name);
+                    try { call.run(); }
+                    catch (RuntimeException ex) {
+                        view.trace("ERROR", ex.toString()); view.status("Command failed: " + ex.getMessage());
+                    }
                 }
             };
         }
@@ -722,17 +883,63 @@ public class ModularEventMockup {
             bindKey(KeyStroke.getKeyStroke(KeyEvent.VK_D, InputEvent.CTRL_DOWN_MASK), "compare", view.compareAction);
         }
         void bindKey(KeyStroke key, String name, Action action) {
-            view.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(key, name);
-            view.getActionMap().put(name, action);
+            InputMap input = view.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT);
+            Object previous = input.get(key);
+            Action oldAction = view.getActionMap().get(name);
+            input.put(key, name); view.getActionMap().put(name, action);
             removals.add(() -> {
-                view.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).remove(key);
-                view.getActionMap().remove(name);
+                if (previous == null) input.remove(key); else input.put(key, previous);
+                if (oldAction == null) view.getActionMap().remove(name);
+                else view.getActionMap().put(name, oldAction);
             });
         }
         JMenuBar menuBar() {
             JMenuBar bar = new JMenuBar(); JMenu menu = new JMenu("Workspace");
             menu.add(new JMenuItem(view.saveAction)); menu.add(new JMenuItem(view.compareAction));
             menu.add(new JMenuItem(view.generateAction)); bar.add(menu); return bar;
+        }
+        void bindPopup(JComponent owner, JScrollPane pane, Function<Point, JPopupMenu> builder,
+                Supplier<Point> anchor) {
+            ContextMenuSupport support = new ContextMenuSupport(owner, pane.getViewport(), builder, anchor);
+            removals.add(support::close);
+        }
+        // Menus capture context version and stable IDs when opened.
+        // Do NOT query the selected row again from inside a menu Action.
+        JPopupMenu menu(String caption) {
+            event("Context menu: " + caption + " [no business call until a command is chosen]");
+            JPopupMenu p = new JPopupMenu();
+            p.putClientProperty("contextVersion", view.contextVersion);
+            JLabel title = new JLabel(caption); title.setFont(BOLD); title.setForeground(BLUE);
+            title.setBorder(new EmptyBorder(6, 10, 6, 10)); p.add(title); p.addSeparator();
+            return p;
+        }
+        void item(JPopupMenu p, String name, Icon icon, boolean enabled, Runnable call) {
+            final long version = (Long) p.getClientProperty("contextVersion");
+            Action a = action(name, icon, () -> {
+                if (version != view.contextVersion) {
+                    view.trace("BLOCKED", "Stale context menu: " + name);
+                    view.status("The displayed data changed. Open the context menu again.");
+                    return;
+                }
+                call.run();
+            });
+            a.setEnabled(enabled);
+            JMenuItem entry = new JMenuItem(a); entry.setFont(BODY); entry.setIconTextGap(7); p.add(entry);
+        }
+        void copyText(String text) {
+            try {
+                Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(text), null);
+                view.trace("UI", "Copied: " + text); view.status("Copied: " + text);
+            } catch (IllegalStateException | HeadlessException | SecurityException ex) {
+                view.trace("ERROR", "Clipboard unavailable: " + ex.getMessage());
+                view.status("Clipboard is not available.");
+            }
+        }
+        Point anchor(JComponent c, Rectangle bounds) {
+            if (bounds == null) return null;
+            c.scrollRectToVisible(bounds);
+            return new Point(bounds.x + Math.min(12, Math.max(1, bounds.width / 2)),
+                    bounds.y + bounds.height / 2);
         }
         void installTree() {
             JTree tree = view.products.tree;
@@ -751,37 +958,108 @@ public class ModularEventMockup {
                 }
             };
             tree.addTreeExpansionListener(expansion); removals.add(() -> tree.removeTreeExpansionListener(expansion));
+            bindPopup(tree, view.products.scrollPane, this::treePopup,
+                    () -> anchor(tree, tree.getPathBounds(tree.getSelectionPath())));
+        }
+        JPopupMenu treePopup(Point point) {
+            JTree tree = view.products.tree;
+            // Exact hit test: empty space must NOT resolve to the nearest node.
+            final TreePath path = tree.getPathForLocation(point.x, point.y);
+            if (path == null) {
+                JPopupMenu p = menu("Tree background / no node");
+                TreePath root = new TreePath(tree.getModel().getRoot());
+                item(p, "Expand all", DOWN, true, () -> expandSubtree(root));
+                item(p, "Collapse all", RIGHT, true, () -> collapseSubtree(root));
+                return p;
+            }
+            ProductNode n = (ProductNode) ((DefaultMutableTreeNode) path.getLastPathComponent()).getUserObject();
+            final String id = n.id, label = n.label;
+            JPopupMenu p = menu((id == null ? "Family: " : "Product: ") + label);
+            if (id != null) {
+                item(p, "Open this product", PRODUCT, true, () -> target.selectProduct(id));
+                item(p, "Refresh this product (mock)", REFRESH, true, () -> target.refreshProduct(id));
+                item(p, "Copy product ID", COPY, true, () -> copyText(id));
+            } else {
+                item(p, "Expand subtree", DOWN, true, () -> expandSubtree(path));
+                item(p, "Collapse subtree", RIGHT, true, () -> collapseSubtree(path));
+                item(p, "Copy family name", COPY, true, () -> copyText(label));
+            }
+            return p;
+        }
+        void expandSubtree(TreePath root) {
+            JTree tree = view.products.tree;
+            DefaultMutableTreeNode node = (DefaultMutableTreeNode) root.getLastPathComponent();
+            Enumeration<?> nodes = node.preorderEnumeration();
+            while (nodes.hasMoreElements()) {
+                DefaultMutableTreeNode n = (DefaultMutableTreeNode) nodes.nextElement();
+                tree.expandPath(new TreePath(n.getPath()));
+            }
+        }
+        void collapseSubtree(TreePath root) {
+            JTree tree = view.products.tree;
+            DefaultMutableTreeNode node = (DefaultMutableTreeNode) root.getLastPathComponent();
+            Enumeration<?> nodes = node.depthFirstEnumeration();
+            while (nodes.hasMoreElements()) {
+                DefaultMutableTreeNode n = (DefaultMutableTreeNode) nodes.nextElement();
+                tree.collapsePath(new TreePath(n.getPath()));
+            }
         }
         void bindSelection(TableModule module, String name, Consumer<String> callback) {
             ListSelectionListener listener = e -> {
                 if (view.isRendering() || e.getValueIsAdjusting()) return;
-                String id = module.selectedId(); // view index -> model index -> stable ID
+                String id = module.selectedId();
                 if (id != null) { event("ListSelectionEvent: " + name + " -> " + id); callback.accept(id); }
             };
             module.table.getSelectionModel().addListSelectionListener(listener);
             removals.add(() -> module.table.getSelectionModel().removeListSelectionListener(listener));
         }
-        void installCandidateMouse() {
-            TableModule m = view.candidates;
-            MouseAdapter mouse = new MouseAdapter() {
+        void installTableMouse(TableModule m) {
+            MouseAdapter doubleClick = new MouseAdapter() {
                 public void mouseClicked(MouseEvent e) {
-                    if (SwingUtilities.isLeftMouseButton(e) && e.getClickCount() == 2) {
-                        String id = m.idAt(e.getPoint()); // do not use a stale selected row
-                        if (id != null) { event("MouseEvent: candidate double-click -> " + id); target.selectCandidate(id); target.compare(); }
-                    }
-                }
-                public void mousePressed(MouseEvent e) { popup(e); }
-                public void mouseReleased(MouseEvent e) { popup(e); }
-                void popup(MouseEvent e) {
-                    if (!e.isPopupTrigger()) return;
+                    if (!SwingUtilities.isLeftMouseButton(e) || e.getClickCount() != 2 || e.isPopupTrigger()) return;
                     String id = m.idAt(e.getPoint()); if (id == null) return;
-                    event("MouseEvent: candidate popup -> " + id + " [UI only until menu action]");
-                    JPopupMenu p = new JPopupMenu();
-                    p.add(action("Compare this candidate", COMPARE, () -> { target.selectCandidate(id); target.compare(); }));
-                    p.show(m.table, e.getX(), e.getY());
+                    event("MouseEvent: " + m.id() + " double-click -> " + id);
+                    if (m == view.files) target.selectFile(id);
+                    else if (m == view.candidates) target.compareCandidate(view.shownFileId, id);
+                    else target.previewRevision(view.shownFileId, id);
                 }
             };
-            m.table.addMouseListener(mouse); removals.add(() -> m.table.removeMouseListener(mouse));
+            m.table.addMouseListener(doubleClick); removals.add(() -> m.table.removeMouseListener(doubleClick));
+            bindPopup(m.table, m.scrollPane, point -> tablePopup(m, point), () -> {
+                int row = m.table.getSelectedRow();
+                return row < 0 ? null : anchor(m.table, m.table.getCellRect(row, 0, true));
+            });
+        }
+        JPopupMenu tablePopup(TableModule m, Point point) {
+            final String id = m.idAt(point); // view row -> model row -> immutable ID
+            final String owner = view.shownFileId;
+            JPopupMenu p = menu(m.id() + ": " + (id == null ? "background / no row" : id));
+            if (id == null) {
+                item(p, "No row at pointer", null, false, () -> { });
+            } else if (m == view.files) {
+                item(p, "Open this file", FILE, true, () -> target.selectFile(id));
+                item(p, "Show file info in trace", INFO, true, () -> target.inspectFile(id));
+                item(p, "Copy file ID", COPY, true, () -> copyText(id));
+            } else if (m == view.candidates) {
+                item(p, "Select this candidate", FILE, owner != null, () -> target.selectCandidate(id));
+                item(p, "Compare this candidate", COMPARE, owner != null, () -> target.compareCandidate(owner, id));
+                item(p, "Generate from this candidate (mock)", GENERATE, owner != null && view.editor.editable,
+                        () -> target.generateFromCandidate(owner, id));
+                item(p, "Show candidate info in trace", INFO, true, () -> target.inspectFile(id));
+                item(p, "Copy candidate ID", COPY, true, () -> copyText(id));
+            } else {
+                revisionItems(p, owner, id);
+            }
+            p.addSeparator();
+            item(p, "Clear sorting (UI only)", REFRESH, true, () -> m.table.getRowSorter().setSortKeys(null));
+            return p;
+        }
+        void revisionItems(JPopupMenu p, String owner, String revision) {
+            item(p, "Compare revision with draft", COMPARE, owner != null,
+                    () -> target.previewRevision(owner, revision));
+            item(p, "Show revision info in trace", INFO, owner != null,
+                    () -> target.inspectRevision(owner, revision));
+            item(p, "Copy file@revision", COPY, owner != null, () -> copyText(owner + "@" + revision));
         }
         void installEditor() {
             DocumentListener document = new DocumentListener() {
@@ -792,7 +1070,6 @@ public class ModularEventMockup {
                     if (view.isRendering() || !view.editor.editable) return;
                     event("DocumentEvent -> editorChanged(text) [no service call]");
                     target.editorChanged(view.editor.editor.getText());
-                    // Do NOT mutate the same Document from inside this callback.
                 }
             };
             view.editor.editor.getDocument().addDocumentListener(document);
@@ -802,33 +1079,52 @@ public class ModularEventMockup {
             GraphCanvas canvas = view.graph.canvas;
             MouseAdapter mouse = new MouseAdapter() {
                 public void mouseClicked(MouseEvent e) {
-                    if (SwingUtilities.isLeftMouseButton(e) && e.getClickCount() == 1) {
+                    if (SwingUtilities.isLeftMouseButton(e) && e.getClickCount() == 1 && !e.isPopupTrigger()) {
+                        canvas.requestFocusInWindow();
                         String id = canvas.hit(e.getPoint());
-                        if (id != null) { event("MouseEvent: graph node -> " + id); target.previewRevision(id); }
+                        if (id != null) {
+                            event("MouseEvent: graph node -> " + id);
+                            target.previewRevision(view.shownFileId, id);
+                        }
                     }
                 }
                 public void mouseMoved(MouseEvent e) {
                     String id = canvas.hit(e.getPoint());
                     canvas.setCursor(Cursor.getPredefinedCursor(id == null ? Cursor.DEFAULT_CURSOR : Cursor.HAND_CURSOR));
-                    canvas.setToolTipText(id == null ? "Wheel: zoom (local UI only)" : id + " / click: preview");
+                    canvas.setToolTipText(id == null ? "Right-click: canvas menu / Wheel: zoom" : id + " / right-click: revision menu");
                 }
                 public void mouseWheelMoved(MouseWheelEvent e) {
                     canvas.zoomBy(e.getWheelRotation()); e.consume();
                     event("MouseWheelEvent: graph zoom " + String.format(Locale.ROOT, "%.1f", canvas.zoom) + " [UI only]");
                 }
-                public void mousePressed(MouseEvent e) { popup(e); }
-                public void mouseReleased(MouseEvent e) { popup(e); }
-                void popup(MouseEvent e) {
-                    if (!e.isPopupTrigger()) return;
-                    String id = canvas.hit(e.getPoint()); if (id == null) return;
-                    event("MouseEvent: graph popup " + id + " [UI only until menu action]");
-                    JPopupMenu p = new JPopupMenu();
-                    p.add(action("Preview " + id, FILE, () -> target.previewRevision(id)));
-                    p.show(canvas, e.getX(), e.getY());
-                }
             };
             canvas.addMouseListener(mouse); canvas.addMouseMotionListener(mouse); canvas.addMouseWheelListener(mouse);
             removals.add(() -> { canvas.removeMouseListener(mouse); canvas.removeMouseMotionListener(mouse); canvas.removeMouseWheelListener(mouse); });
+            bindPopup(canvas, view.graph.scrollPane, this::graphPopup, () -> {
+                GraphNode node = canvas.node(canvas.selected);
+                if (node == null) return new Point(8, 8);
+                Rectangle r = new Rectangle((int) (node.shape.getX() * canvas.zoom),
+                        (int) (node.shape.getY() * canvas.zoom), (int) (node.shape.getWidth() * canvas.zoom),
+                        (int) (node.shape.getHeight() * canvas.zoom));
+                return anchor(canvas, r);
+            });
+        }
+        JPopupMenu graphPopup(Point point) {
+            GraphCanvas canvas = view.graph.canvas;
+            final String revision = canvas.hit(point), owner = view.shownFileId;
+            JPopupMenu p = menu(revision == null ? "Graph background / no node" : owner + " / " + revision);
+            if (revision != null) {
+                revisionItems(p, owner, revision);
+                GraphNode n = canvas.node(revision);
+                final String parent = n.revision.parentId;
+                item(p, "Compare parent with draft", COMPARE, parent != null && owner != null,
+                        () -> target.previewRevision(owner, parent));
+                p.addSeparator();
+            }
+            item(p, "Zoom in (UI only)", GENERATE, true, () -> canvas.zoomBy(-1));
+            item(p, "Zoom out (UI only)", null, true, () -> canvas.zoomBy(1));
+            item(p, "Reset zoom to 100%", REFRESH, true, canvas::resetZoom);
+            return p;
         }
         public void close() {
             if (closed) return; closed = true;
@@ -868,7 +1164,13 @@ public class ModularEventMockup {
             } else if ("file".equals(type)) { path(4, 2, 10, 2, 13, 5, 13, 14, 4, 14, 4, 2); path(6, 8, 11, 8); }
             else if ("save".equals(type)) { shapes.add(new Rectangle2D.Double(2, 2, 12, 12)); path(5, 2, 5, 6, 11, 6, 11, 2); path(5, 14, 5, 10, 11, 10, 11, 14); }
             else if ("compare".equals(type)) { path(1, 3, 6, 3, 6, 13, 1, 13, 1, 3); path(10, 3, 15, 3, 15, 13, 10, 13, 10, 3); }
-            else { path(8, 3, 8, 13); path(3, 8, 13, 8); }
+            else if ("copy".equals(type)) {
+                shapes.add(new Rectangle2D.Double(5, 5, 9, 9)); path(11, 3, 11, 1, 1, 1, 1, 11, 3, 11);
+            } else if ("info".equals(type)) {
+                shapes.add(new Ellipse2D.Double(2, 2, 12, 12)); path(8, 7, 8, 11); path(8, 5, 8, 5.1);
+            } else if ("refresh".equals(type)) {
+                shapes.add(new Arc2D.Double(3, 3, 10, 10, 35, 290, Arc2D.OPEN)); path(10, 2, 14, 3, 13, 7);
+            } else { path(8, 3, 8, 13); path(3, 8, 13, 8); }
         }
         void path(double... xy) {
             Path2D p = new Path2D.Double(); p.moveTo(xy[0], xy[1]);
